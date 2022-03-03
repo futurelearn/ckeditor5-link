@@ -73,6 +73,14 @@ export default class LinkActionsView extends View {
 		this.editButtonView = this._createButton( t( 'Edit link' ), icons.pencil, 'edit' );
 
 		/**
+		 * The edit link's title button view.
+		 *
+		 * @member {module:ui/button/buttonview~ButtonView}
+		 */
+		 this.editTitleAnchorButtonView = this._createButton( t( "Edit anchor's title" ), icons.cog, 'anchorTitle' );
+
+
+		/**
 		 * The value of the "href" attribute of the link to use in the {@link #previewButtonView}.
 		 *
 		 * @observable
@@ -126,6 +134,7 @@ export default class LinkActionsView extends View {
 			children: [
 				this.previewButtonView,
 				this.editButtonView,
+				this.editTitleAnchorButtonView,
 				this.unlinkButtonView
 			]
 		} );
@@ -140,6 +149,7 @@ export default class LinkActionsView extends View {
 		const childViews = [
 			this.previewButtonView,
 			this.editButtonView,
+			this.editTitleAnchorButtonView,
 			this.unlinkButtonView
 		];
 
@@ -236,4 +246,10 @@ export default class LinkActionsView extends View {
  * Fired when the {@link #unlinkButtonView} is clicked.
  *
  * @event unlink
+ */
+
+/**
+ * Fired when the {@link #editTitleAnchorButtonView} is clicked.
+ *
+ * @event anchorTitle
  */

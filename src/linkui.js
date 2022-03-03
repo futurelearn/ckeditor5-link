@@ -12,6 +12,7 @@ import { ClickObserver } from 'ckeditor5/src/engine';
 import { ButtonView, ContextualBalloon, clickOutsideHandler } from 'ckeditor5/src/ui';
 import { isWidget } from 'ckeditor5/src/widget';
 import LinkFormView from './ui/linkformview';
+import AnchorTitleLinkFormView from './ui/anchortitlelinkformview';
 import LinkActionsView from './ui/linkactionsview';
 import { addLinkProtocolIfApplicable, isLinkElement, LINK_KEYSTROKE } from './utils';
 
@@ -64,6 +65,8 @@ export default class LinkUI extends Plugin {
 		 */
 		this.formView = this._createFormView();
 
+		this.anchorTitleFormView = this._createAnchorTitleFormView();
+
 		/**
 		 * The contextual balloon plugin instance.
 		 *
@@ -102,8 +105,13 @@ export default class LinkUI extends Plugin {
 	destroy() {
 		super.destroy();
 
+		this.destroyFormViews();
+	}
+
+	destroyFormViews() {
 		// Destroy created UI components as they are not automatically destroyed (see ckeditor5#1341).
 		this.formView.destroy();
+		this.anchorTitleFormView.destroy();
 	}
 
 	/**
@@ -117,14 +125,21 @@ export default class LinkUI extends Plugin {
 		const actionsView = new LinkActionsView( editor.locale );
 		const linkCommand = editor.commands.get( 'link' );
 		const unlinkCommand = editor.commands.get( 'unlink' );
+		const insertLinkTitleCommand = editor.commands.get('insertLinkTitleCommand');
 
 		actionsView.bind( 'href' ).to( linkCommand, 'value' );
 		actionsView.editButtonView.bind( 'isEnabled' ).to( linkCommand );
 		actionsView.unlinkButtonView.bind( 'isEnabled' ).to( unlinkCommand );
+		actionsView.editTitleAnchorButtonView.bind( 'isEnabled' ).to( insertLinkTitleCommand );
 
 		// Execute unlink command after clicking on the "Edit" button.
 		this.listenTo( actionsView, 'edit', () => {
 			this._addFormView();
+		} );
+
+		// Execute anchor title command after clicking the "Edit anchor's title" button.
+		this.listenTo( actionsView, 'anchorTitle', () => {
+			this._addAnchorTitleFormView();
 		} );
 
 		// Execute unlink command after clicking on the "Unlink" button.
@@ -183,6 +198,39 @@ export default class LinkUI extends Plugin {
 		// Close the panel on esc key press when the **form has focus**.
 		formView.keystrokes.set( 'Esc', ( data, cancel ) => {
 			this._closeFormView();
+			cancel();
+		} );
+
+		return formView;
+	}
+
+	_createAnchorTitleFormView() {
+		const editor = this.editor;
+		const linkCommand = editor.commands.get( 'insertLinkTitleCommand' );
+
+		const formView = new AnchorTitleLinkFormView( editor.locale, linkCommand );
+
+		formView.titleInputView.fieldView.bind( 'value' ).to( linkCommand, 'value' );
+
+		// Form elements should be read-only when corresponding commands are disabled.
+		formView.titleInputView.bind( 'isReadOnly' ).to( linkCommand, 'isEnabled', value => !value );
+		formView.saveButtonView.bind( 'isEnabled' ).to( linkCommand );
+
+		// Execute link command after clicking the "Save" button.
+		this.listenTo( formView, 'submit', () => {
+			const { value } = formView.titleInputView.fieldView.element;
+			editor.execute( 'insertLinkTitleCommand', { newValue: value } );
+			this._closeAnchorTitleFormView();
+		} );
+
+		// Hide the panel after clicking the "Cancel" button.
+		this.listenTo( formView, 'cancel', () => {
+			this._closeAnchorTitleFormView();
+		} );
+
+		// Close the panel on esc key press when the **form has focus**.
+		formView.keystrokes.set( 'Esc', ( _data, cancel ) => {
+			this._closeAnchorTitleFormView();
 			cancel();
 		} );
 
@@ -273,8 +321,13 @@ export default class LinkUI extends Plugin {
 		} );
 
 		// Close on click outside of balloon panel element.
+		this.handleOutsideClickFor(this.formView);
+		this.handleOutsideClickFor(this.anchorTitleFormView);
+	}
+
+	handleOutsideClickFor(view) {
 		clickOutsideHandler( {
-			emitter: this.formView,
+			emitter: view,
 			activator: () => this._isUIInPanel,
 			contextElements: [ this._balloon.view.element ],
 			callback: () => this._hideUI()
@@ -287,7 +340,7 @@ export default class LinkUI extends Plugin {
 	 * @protected
 	 */
 	_addActionsView() {
-		if ( this._areActionsInPanel ) {
+		if ( this._isInPanel(this.actionsView) ) {
 			return;
 		}
 
@@ -303,7 +356,7 @@ export default class LinkUI extends Plugin {
 	 * @protected
 	 */
 	_addFormView() {
-		if ( this._isFormInPanel ) {
+		if ( this._isInPanel(this.formView) ) {
 			return;
 		}
 
@@ -331,6 +384,38 @@ export default class LinkUI extends Plugin {
 		// https://github.com/ckeditor/ckeditor5-link/issues/78
 		// https://github.com/ckeditor/ckeditor5-link/issues/123
 		this.formView.urlInputView.fieldView.element.value = linkCommand.value || '';
+	}
+
+	// TODO: Refactor
+	_addAnchorTitleFormView() {
+		if ( this._isInPanel(this.anchorTitleFormView) ) {
+			return;
+		}
+
+		const editor = this.editor;
+		const linkTitleCommand = editor.commands.get( 'insertLinkTitleCommand' );
+
+		this.anchorTitleFormView.disableCssTransitions();
+
+		this._balloon.add( {
+			view: this.anchorTitleFormView,
+			position: this._getBalloonPositionData()
+		} );
+
+		// Select input when form view is currently visible.
+		if ( this._balloon.visibleView === this.anchorTitleFormView ) {
+			this.anchorTitleFormView.titleInputView.fieldView.select();
+		}
+
+		this.anchorTitleFormView.enableCssTransitions();
+
+		// Make sure that each time the panel shows up, the URL field remains in sync with the value of
+		// the command. If the user typed in the input, then canceled the balloon (`titleInputView.fieldView#value` stays
+		// unaltered) and re-opened it without changing the value of the link command (e.g. because they
+		// clicked the same link), they would see the old value instead of the actual value of the command.
+		// https://github.com/ckeditor/ckeditor5-link/issues/78
+		// https://github.com/ckeditor/ckeditor5-link/issues/123
+		this.anchorTitleFormView.titleInputView.fieldView.element.value = linkTitleCommand.value || '';
 	}
 
 	/**
@@ -362,12 +447,38 @@ export default class LinkUI extends Plugin {
 	 * @protected
 	 */
 	_removeFormView() {
-		if ( this._isFormInPanel ) {
+		if ( this._isInPanel(this.formView) ) {
 			// Blur the input element before removing it from DOM to prevent issues in some browsers.
 			// See https://github.com/ckeditor/ckeditor5/issues/1501.
 			this.formView.saveButtonView.focus();
 
 			this._balloon.remove( this.formView );
+
+			// Because the form has an input which has focus, the focus must be brought back
+			// to the editor. Otherwise, it would be lost.
+			this.editor.editing.view.focus();
+
+			this._hideFakeVisualSelection();
+		}
+	}
+
+	_closeAnchorTitleFormView() {
+		const linkCommand = this.editor.commands.get( 'insertLinkTitleCommand' );
+
+		if ( linkCommand.value !== undefined ) {
+			this._removeAnchorTitleFormView();
+		} else {
+			this._hideUI();
+		}
+	}
+
+	_removeAnchorTitleFormView() {
+		if ( this._isInPanel(this.anchorTitleFormView) ) {
+			// Blur the input element before removing it from DOM to prevent issues in some browsers.
+			// See https://github.com/ckeditor/ckeditor5/issues/1501.
+			this.anchorTitleFormView.saveButtonView.focus();
+
+			this._balloon.remove( this.anchorTitleFormView );
 
 			// Because the form has an input which has focus, the focus must be brought back
 			// to the editor. Otherwise, it would be lost.
@@ -396,14 +507,13 @@ export default class LinkUI extends Plugin {
 			if ( forceVisible ) {
 				this._balloon.showStack( 'main' );
 			}
-
 			this._addFormView();
 		}
 		// If there's a link under the selection...
 		else {
 			// Go to the editing UI if actions are already visible.
 			if ( this._areActionsVisible ) {
-				this._addFormView();
+				this.addFormViews();
 			}
 			// Otherwise display just the actions UI.
 			else {
@@ -418,6 +528,11 @@ export default class LinkUI extends Plugin {
 
 		// Begin responding to ui#update once the UI is added.
 		this._startUpdatingUI();
+	}
+
+	addFormViews() {
+		this._addFormView();
+		this._addAnchorTitleFormView();
 	}
 
 	/**
@@ -441,13 +556,18 @@ export default class LinkUI extends Plugin {
 		// Doing otherwise causes issues in some browsers. See https://github.com/ckeditor/ckeditor5-link/issues/193.
 		editor.editing.view.focus();
 
-		// Remove form first because it's on top of the stack.
-		this._removeFormView();
+		this.removeFormViews();
 
 		// Then remove the actions view because it's beneath the form.
 		this._balloon.remove( this.actionsView );
 
 		this._hideFakeVisualSelection();
+	}
+
+	removeFormViews() {
+		// Remove form first because it's on top of the stack.
+		this._removeFormView();
+		this._removeAnchorTitleFormView();
 	}
 
 	/**
@@ -508,26 +628,8 @@ export default class LinkUI extends Plugin {
 		this.listenTo( this._balloon, 'change:visibleView', update );
 	}
 
-	/**
-	 * Returns `true` when {@link #formView} is in the {@link #_balloon}.
-	 *
-	 * @readonly
-	 * @protected
-	 * @type {Boolean}
-	 */
-	get _isFormInPanel() {
-		return this._balloon.hasView( this.formView );
-	}
-
-	/**
-	 * Returns `true` when {@link #actionsView} is in the {@link #_balloon}.
-	 *
-	 * @readonly
-	 * @protected
-	 * @type {Boolean}
-	 */
-	get _areActionsInPanel() {
-		return this._balloon.hasView( this.actionsView );
+	_isInPanel(view) {
+		return this._balloon.hasView(view)
 	}
 
 	/**
@@ -550,7 +652,7 @@ export default class LinkUI extends Plugin {
 	 * @type {Boolean}
 	 */
 	get _isUIInPanel() {
-		return this._isFormInPanel || this._areActionsInPanel;
+		return this._isInPanel(this.formView) || this._isInPanel(this.actionsView) || this._isInPanel(this.anchorTitleFormView);
 	}
 
 	/**
@@ -564,7 +666,7 @@ export default class LinkUI extends Plugin {
 	get _isUIVisible() {
 		const visibleView = this._balloon.visibleView;
 
-		return visibleView == this.formView || this._areActionsVisible;
+		return visibleView == this.formView || visibleView == this.anchorTitleFormView || this._areActionsVisible;
 	}
 
 	/**
@@ -711,5 +813,7 @@ export default class LinkUI extends Plugin {
 // @param {module:engine/view/position~Position} View position to analyze.
 // @returns {module:engine/view/attributeelement~AttributeElement|null} Link element at the position or null.
 function findLinkElementAncestor( position ) {
-	return position.getAncestors().find( ancestor => isLinkElement( ancestor ) );
+	return position.getAncestors().find( ancestor => {
+		return isLinkElement( ancestor )
+	});
 }

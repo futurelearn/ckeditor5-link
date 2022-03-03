@@ -31,7 +31,7 @@ export const LINK_KEYSTROKE = 'Ctrl+K';
  * @returns {Boolean}
  */
 export function isLinkElement( node ) {
-	return node.is( 'attributeElement' ) && !!node.getCustomProperty( 'link' );
+	return node.is( 'attributeElement' ) && (!!node.getCustomProperty( 'link' ) || !!node.getCustomProperty( 'customLink' ));
 }
 
 /**
