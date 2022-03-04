@@ -67,7 +67,7 @@ export default class UnlinkCommand extends Command {
 
 			// Remove `linkHref` attribute from specified ranges.
 			for ( const range of rangesToUnlink ) {
-				writer.removeAttribute( 'linkHref', range );
+				this._removeLinkAttributes(writer);
 				// If there are registered custom attributes, then remove them during unlink.
 				if ( linkCommand ) {
 					for ( const manualDecorator of linkCommand.manualDecorators ) {
@@ -76,5 +76,10 @@ export default class UnlinkCommand extends Command {
 				}
 			}
 		} );
+	}
+
+	_removeLinkAttributes(writer) {
+		writer.removeAttribute( 'linkHref', range );
+		writer.removeAttribute( 'linkTitle', range);
 	}
 }
