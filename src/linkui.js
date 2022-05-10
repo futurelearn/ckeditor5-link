@@ -1,5 +1,5 @@
 /**
- * @license Copyright (c) 2003-2021, CKSource - Frederico Knabben. All rights reserved.
+ * @license Copyright (c) 2003-2022, CKSource Holding sp. z o.o. All rights reserved.
  * For licensing, see LICENSE.md or https://ckeditor.com/legal/ckeditor-oss-license
  */
 
@@ -327,7 +327,7 @@ export default class LinkUI extends Plugin {
 
 	handleOutsideClickFor(view) {
 		clickOutsideHandler( {
-			emitter: view,
+			emitter: this.formView,
 			activator: () => this._isUIInPanel,
 			contextElements: [ this._balloon.view.element ],
 			callback: () => this._hideUI()
@@ -340,7 +340,7 @@ export default class LinkUI extends Plugin {
 	 * @protected
 	 */
 	_addActionsView() {
-		if ( this._isInPanel(this.actionsView) ) {
+		if ( this._areActionsInPanel ) {
 			return;
 		}
 
@@ -356,7 +356,7 @@ export default class LinkUI extends Plugin {
 	 * @protected
 	 */
 	_addFormView() {
-		if ( this._isInPanel(this.formView) ) {
+		if ( this._isFormInPanel ) {
 			return;
 		}
 
@@ -388,7 +388,7 @@ export default class LinkUI extends Plugin {
 
 	// TODO: Refactor
 	_addAnchorTitleFormView() {
-		if ( this._isInPanel(this.anchorTitleFormView) ) {
+		if ( this._isAnchorTitleFormInPanel ) {
 			return;
 		}
 
@@ -447,7 +447,7 @@ export default class LinkUI extends Plugin {
 	 * @protected
 	 */
 	_removeFormView() {
-		if ( this._isInPanel(this.formView) ) {
+		if ( this._isFormInPanel ) {
 			// Blur the input element before removing it from DOM to prevent issues in some browsers.
 			// See https://github.com/ckeditor/ckeditor5/issues/1501.
 			this.formView.saveButtonView.focus();
@@ -473,7 +473,7 @@ export default class LinkUI extends Plugin {
 	}
 
 	_removeAnchorTitleFormView() {
-		if ( this._isInPanel(this.anchorTitleFormView) ) {
+		if ( this._isAnchorTitleFormInPanel ) {
 			// Blur the input element before removing it from DOM to prevent issues in some browsers.
 			// See https://github.com/ckeditor/ckeditor5/issues/1501.
 			this.anchorTitleFormView.saveButtonView.focus();
@@ -507,6 +507,7 @@ export default class LinkUI extends Plugin {
 			if ( forceVisible ) {
 				this._balloon.showStack( 'main' );
 			}
+
 			this._addFormView();
 		}
 		// If there's a link under the selection...
@@ -628,8 +629,38 @@ export default class LinkUI extends Plugin {
 		this.listenTo( this._balloon, 'change:visibleView', update );
 	}
 
-	_isInPanel(view) {
-		return this._balloon.hasView(view)
+	/**
+	 * Returns `true` when {@link #anchorTitleFormView} is in the {@link #_balloon}.
+	 *
+	 * @readonly
+	 * @protected
+	 * @type {Boolean}
+	 */
+	get _isAnchorTitleFormInPanel() {
+		return this._balloon.hasView( this.anchorTitleFormView );
+	}
+
+
+	/**
+	 * Returns `true` when {@link #formView} is in the {@link #_balloon}.
+	 *
+	 * @readonly
+	 * @protected
+	 * @type {Boolean}
+	 */
+	get _isFormInPanel() {
+		return this._balloon.hasView( this.formView );
+	}
+
+	/**
+	 * Returns `true` when {@link #actionsView} is in the {@link #_balloon}.
+	 *
+	 * @readonly
+	 * @protected
+	 * @type {Boolean}
+	 */
+	get _areActionsInPanel() {
+		return this._balloon.hasView( this.actionsView );
 	}
 
 	/**
@@ -652,7 +683,7 @@ export default class LinkUI extends Plugin {
 	 * @type {Boolean}
 	 */
 	get _isUIInPanel() {
-		return this._isInPanel(this.formView) || this._isInPanel(this.actionsView) || this._isInPanel(this.anchorTitleFormView);
+		return this._isFormInPanel || this._isAnchorTitleFormInPanel || this._areActionsInPanel;
 	}
 
 	/**
@@ -813,7 +844,5 @@ export default class LinkUI extends Plugin {
 // @param {module:engine/view/position~Position} View position to analyze.
 // @returns {module:engine/view/attributeelement~AttributeElement|null} Link element at the position or null.
 function findLinkElementAncestor( position ) {
-	return position.getAncestors().find( ancestor => {
-		return isLinkElement( ancestor )
-	});
+	return position.getAncestors().find( ancestor => isLinkElement( ancestor ) );
 }
